@@ -226,6 +226,154 @@ tr:last-child td {
 .export-btn {
     margin-top: 20px;
     text-align: center;
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+/* 弹窗样式 */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+}
+
+.modal-overlay.show {
+    display: flex;
+}
+
+.modal {
+    background: white;
+    border-radius: 20px;
+    width: 100%;
+    max-width: 700px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #333;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 28px;
+    cursor: pointer;
+    color: #999;
+    transition: color 0.2s ease;
+    line-height: 1;
+}
+
+.modal-close:hover {
+    color: #667eea;
+}
+
+.modal-body {
+    padding: 24px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.modal-date-select {
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.modal-date-select label {
+    font-weight: 600;
+    color: #555;
+}
+
+.modal-date-select input {
+    padding: 10px 14px;
+    border: 2px solid #e8e8e8;
+    border-radius: 8px;
+    font-size: 14px;
+}
+
+.modal-textarea {
+    width: 100%;
+    min-height: 300px;
+    padding: 16px;
+    border: 2px solid #e8e8e8;
+    border-radius: 12px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 14px;
+    line-height: 1.8;
+    resize: vertical;
+    background: #fafafa;
+}
+
+.modal-textarea:focus {
+    outline: none;
+    border-color: #667eea;
+    background: white;
+}
+
+.modal-footer {
+    padding: 16px 24px;
+    border-top: 1px solid #f0f0f0;
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+.btn-info {
+    background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+    color: #333;
+    box-shadow: 0 4px 15px rgba(168, 237, 234, 0.4);
+}
+
+.btn-info:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(168, 237, 234, 0.5);
+}
+
+.btn-info:active {
+    transform: translateY(0);
+}
+
+.btn-copy {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    color: white;
+    box-shadow: 0 4px 15px rgba(79, 172, 254, 0.4);
+}
+
+.btn-copy:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(79, 172, 254, 0.5);
+}
+
+.btn-copy:active {
+    transform: translateY(0);
+}
+
+.btn-copy.copied {
+    background: linear-gradient(135deg, #56ab2f 0%, #a8e6cf 100%);
 }
 
 @media (min-width: 600px) {
@@ -329,6 +477,27 @@ tr:last-child td {
             </div>
             <div class="export-btn">
                 <button class="btn btn-primary" onclick="exportToExcel()">📥 导出Excel文件</button>
+                <button class="btn btn-info" onclick="openSummaryModal()">📝 生成汇总</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 汇总弹窗 -->
+    <div class="modal-overlay" id="summaryModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title">出库汇总</div>
+                <button class="modal-close" onclick="closeSummaryModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-date-select">
+                    <label>选择日期：</label>
+                    <input type="date" id="summaryDate" onchange="generateSummary()">
+                </div>
+                <textarea class="modal-textarea" id="summaryText" readonly></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-copy" id="copyBtn" onclick="copySummary()">📋 一键复制</button>
             </div>
         </div>
     </div>
@@ -460,6 +629,98 @@ function exportToExcel() {
 
     XLSX.writeFile(wb, '出库记录_' + new Date().toISOString().split('T')[0] + '.xlsx');
 }
+
+// 打开汇总弹窗
+function openSummaryModal() {
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('summaryDate').value = today;
+    document.getElementById('summaryModal').classList.add('show');
+    generateSummary();
+}
+
+// 关闭汇总弹窗
+function closeSummaryModal() {
+    document.getElementById('summaryModal').classList.remove('show');
+}
+
+// 生成汇总文本
+function generateSummary() {
+    const selectedDate = document.getElementById('summaryDate').value;
+    if (!selectedDate) return;
+
+    // 筛选指定日期的记录
+    const filteredRecords = outboundRecords.filter(record => {
+        const recordDate = new Date(record.createTime).toISOString().split('T')[0];
+        return recordDate === selectedDate;
+    });
+
+    // 计算总卡数
+    const totalCardNumber = filteredRecords.reduce((sum, record) => 
+        sum + (parseInt(record.cardNumber) * parseInt(record.quantity)), 0
+    );
+
+    // 按品名分组并叠加
+    const grouped = {};
+    filteredRecords.forEach(record => {
+        const name = record.productName;
+        if (!grouped[name]) {
+            grouped[name] = { cardNumber: 0, quantity: 0 };
+        }
+        grouped[name].cardNumber += parseInt(record.cardNumber);
+        grouped[name].quantity += parseInt(record.quantity);
+    });
+
+    // 生成简洁的纯文本（适合微信显示）
+    let text = `📦 出库汇总 - ${selectedDate}\n`;
+    text += '─'.repeat(30) + '\n\n';
+
+    if (Object.keys(grouped).length === 0) {
+        text += '今日暂无出库记录\n';
+    } else {
+        Object.keys(grouped).forEach((name, index) => {
+            const data = grouped[name];
+            text += `${index + 1}. ${name}\n`;
+            text += `   卡数：${data.cardNumber}  数量：${data.quantity}\n`;
+            text += '\n';
+        });
+
+        text += '─'.repeat(30) + '\n';
+        text += `📊 记录数：${filteredRecords.length} 条\n`;
+        text += `📊 总卡数：${totalCardNumber}\n`;
+    }
+
+    document.getElementById('summaryText').value = text;
+}
+
+// 复制汇总文本
+function copySummary() {
+    const textarea = document.getElementById('summaryText');
+    const copyBtn = document.getElementById('copyBtn');
+
+    textarea.select();
+    textarea.setSelectionRange(0, 99999);
+
+    try {
+        document.execCommand('copy');
+        copyBtn.classList.add('copied');
+        copyBtn.innerHTML = '✅ 已复制';
+        
+        setTimeout(() => {
+            copyBtn.classList.remove('copied');
+            copyBtn.innerHTML = '📋 一键复制';
+        }, 2000);
+    } catch (err) {
+        alert('复制失败，请手动复制');
+    }
+}
+
+// 点击弹窗外部关闭
+document.addEventListener('click', function(e) {
+    const modal = document.getElementById('summaryModal');
+    if (e.target === modal) {
+        closeSummaryModal();
+    }
+});
     </script>
 </body>
 </html>
