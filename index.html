@@ -595,11 +595,26 @@ function getCurrentMonthRecords() {
     const currentMonth = now.getMonth();
     
     return outboundRecords.filter(record => {
-        const recordDate = new Date(record.createTime);
-        if (isNaN(recordDate.getTime())) {
+        try {
+            const recordDate = new Date(record.createTime);
+            if (!isNaN(recordDate.getTime())) {
+                return recordDate.getFullYear() === currentYear && recordDate.getMonth() === currentMonth;
+            }
+            
+            // 直接解析失败，尝试从字符串中提取日期部分
+            const dateStr = record.createTime;
+            const dateMatch = dateStr.match(/(\d{4})[年/-](\d{1,2})[月/-](\d{1,2})[日]/) || 
+                             dateStr.match(/(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
+            
+            if (dateMatch) {
+                const [, year, month] = dateMatch;
+                return parseInt(year) === currentYear && (parseInt(month) - 1) === currentMonth;
+            }
+            
+            return false;
+        } catch (e) {
             return false;
         }
-        return recordDate.getFullYear() === currentYear && recordDate.getMonth() === currentMonth;
     });
 }
 
@@ -702,19 +717,29 @@ function generateSummary() {
         try {
             // 尝试解析出库时间
             const recordDate = new Date(record.createTime);
-            if (isNaN(recordDate.getTime())) {
-                // 如果直接解析失败，尝试从字符串中提取日期部分
-                const dateStr = record.createTime;
-                // 匹配各种可能的日期格式
-                const dateMatch = dateStr.match(/(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
-                if (dateMatch) {
-                    const [, year, month, day] = dateMatch;
-                    const formattedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-                    return formattedDate === selectedDate;
-                }
-                return false;
+            if (!isNaN(recordDate.getTime())) {
+                // 直接解析成功，比较日期部分
+                const recordDateStr = recordDate.toISOString().split('T')[0];
+                return recordDateStr === selectedDate;
             }
-            return recordDate.toISOString().split('T')[0] === selectedDate;
+            
+            // 直接解析失败，尝试从字符串中提取日期部分
+            const dateStr = record.createTime;
+            
+            // 匹配多种可能的日期时间格式
+            // 格式1: 2026/3/31 12:34:56
+            // 格式2: 2026-3-31 12:34:56
+            // 格式3: 2026年3月31日 12:34:56
+            const dateMatch = dateStr.match(/(\d{4})[年/-](\d{1,2})[月/-](\d{1,2})[日]/) || 
+                             dateStr.match(/(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
+            
+            if (dateMatch) {
+                const [, year, month, day] = dateMatch;
+                const formattedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                return formattedDate === selectedDate;
+            }
+            
+            return false;
         } catch (e) {
             return false;
         }
