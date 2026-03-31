@@ -699,12 +699,25 @@ function generateSummary() {
 
     // 筛选指定日期的记录
     const filteredRecords = outboundRecords.filter(record => {
-        // 尝试解析出库时间
-        const recordDate = new Date(record.createTime);
-        if (isNaN(recordDate.getTime())) {
+        try {
+            // 尝试解析出库时间
+            const recordDate = new Date(record.createTime);
+            if (isNaN(recordDate.getTime())) {
+                // 如果直接解析失败，尝试从字符串中提取日期部分
+                const dateStr = record.createTime;
+                // 匹配各种可能的日期格式
+                const dateMatch = dateStr.match(/(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
+                if (dateMatch) {
+                    const [, year, month, day] = dateMatch;
+                    const formattedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                    return formattedDate === selectedDate;
+                }
+                return false;
+            }
+            return recordDate.toISOString().split('T')[0] === selectedDate;
+        } catch (e) {
             return false;
         }
-        return recordDate.toISOString().split('T')[0] === selectedDate;
     });
 
     // 计算总卡数
