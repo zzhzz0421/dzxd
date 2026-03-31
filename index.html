@@ -478,6 +478,7 @@ tr:last-child td {
             <div class="export-btn">
                 <button class="btn btn-primary" onclick="exportToExcel()">📥 导出Excel文件</button>
                 <button class="btn btn-info" onclick="openSummaryModal()">📝 生成汇总</button>
+                <button class="btn btn-copy" onclick="generateMonthTextSummary()">📄 当月文字汇总</button>
             </div>
         </div>
     </div>
@@ -588,23 +589,39 @@ function isWeChatBrowser() {
     return /MicroMessenger/i.test(navigator.userAgent);
 }
 
+function getCurrentMonthRecords() {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    
+    return outboundRecords.filter(record => {
+        const recordDate = new Date(record.createTime);
+        if (isNaN(recordDate.getTime())) {
+            return false;
+        }
+        return recordDate.getFullYear() === currentYear && recordDate.getMonth() === currentMonth;
+    });
+}
+
 function exportToExcel() {
-    if (outboundRecords.length === 0) {
-        alert('暂无数据可导出');
+    const currentMonthRecords = getCurrentMonthRecords();
+    
+    if (currentMonthRecords.length === 0) {
+        alert('当月暂无数据可导出');
         return;
     }
 
-    const totalCardNumber = outboundRecords.reduce((sum, record) => sum + (parseInt(record.cardNumber) * parseInt(record.quantity)), 0);
+    const totalCardNumber = currentMonthRecords.reduce((sum, record) => sum + (parseInt(record.cardNumber) * parseInt(record.quantity)), 0);
 
     const wb = XLSX.utils.book_new();
     
     const data = [
-        ['出库记录表'],
+        ['当月出库汇总表'],
         [],
         ['序号', '品名', '卡数', '数量', '出库时间']
     ];
 
-    outboundRecords.forEach((record, index) => {
+    currentMonthRecords.forEach((record, index) => {
         data.push([
             index + 1,
             record.productName,
@@ -629,7 +646,9 @@ function exportToExcel() {
 
     ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }];
 
-    XLSX.utils.book_append_sheet(wb, ws, '出库记录');
+    XLSX.utils.book_append_sheet(wb, ws, '当月出库记录');
+
+    const fileName = '当月出库汇总_' + currentMonthRecords[0].createTime.substring(0, 7) + '.xlsx';
 
     if (isWeChatBrowser()) {
         // 微信浏览器处理
@@ -639,7 +658,7 @@ function exportToExcel() {
         
         const a = document.createElement('a');
         a.href = url;
-        a.download = '出库记录_' + new Date().toISOString().split('T')[0] + '.xlsx';
+        a.download = fileName;
         a.style.display = 'none';
         document.body.appendChild(a);
         
@@ -656,7 +675,7 @@ function exportToExcel() {
         }
     } else {
         // 普通浏览器直接下载
-        XLSX.writeFile(wb, '出库记录_' + new Date().toISOString().split('T')[0] + '.xlsx');
+        XLSX.writeFile(wb, fileName);
     }
 }
 
@@ -680,8 +699,12 @@ function generateSummary() {
 
     // 筛选指定日期的记录
     const filteredRecords = outboundRecords.filter(record => {
-        const recordDate = new Date(record.createTime).toISOString().split('T')[0];
-        return recordDate === selectedDate;
+        // 尝试解析出库时间
+        const recordDate = new Date(record.createTime);
+        if (isNaN(recordDate.getTime())) {
+            return false;
+        }
+        return recordDate.toISOString().split('T')[0] === selectedDate;
     });
 
     // 计算总卡数
@@ -705,7 +728,7 @@ function generateSummary() {
     text += '─'.repeat(30) + '\n\n';
 
     if (Object.keys(grouped).length === 0) {
-        text += '今日暂无出库记录\n';
+        text += '该日期暂无出库记录\n';
     } else {
         Object.keys(grouped).forEach((name, index) => {
             const data = grouped[name];
@@ -742,6 +765,44 @@ function copySummary() {
     } catch (err) {
         alert('复制失败，请手动复制');
     }
+}
+
+// 生成当月文字汇总
+function generateMonthTextSummary() {
+    const currentMonthRecords = getCurrentMonthRecords();
+    
+    if (currentMonthRecords.length === 0) {
+        alert('当月暂无数据');
+        return;
+    }
+
+    const totalCardNumber = currentMonthRecords.reduce((sum, record) => 
+        sum + (parseInt(record.cardNumber) * parseInt(record.quantity)), 0
+    );
+
+    // 生成Excel格式的文字汇总
+    let text = `📦 当月出库汇总\n`;
+    text += '─'.repeat(60) + '\n';
+    text += '| 序号 | 品名        | 卡数 | 数量 | 出库时间          |\n';
+    text += '|------|-------------|------|------|-------------------|\n';
+
+    currentMonthRecords.forEach((record, index) => {
+        const name = record.productName.padEnd(11);
+        const cardNum = record.cardNumber.toString().padEnd(4);
+        const quantity = record.quantity.toString().padEnd(4);
+        const time = record.createTime.padEnd(17);
+        
+        text += `| ${(index + 1).toString().padEnd(4)} | ${name} | ${cardNum} | ${quantity} | ${time} |\n`;
+    });
+
+    text += '─'.repeat(60) + '\n';
+    text += `| 总计 |             |      |      | 总卡数：${totalCardNumber.toString().padEnd(10)} |\n`;
+    text += '─'.repeat(60) + '\n';
+
+    // 显示在弹窗中
+    document.getElementById('summaryText').value = text;
+    document.getElementById('summaryModal').classList.add('show');
+    document.getElementById('summaryDate').value = '';
 }
 
 // 点击弹窗外部关闭
