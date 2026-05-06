@@ -510,11 +510,38 @@ tr:last-child td {
     </div>
 
     <script>
-let outboundRecords = JSON.parse(localStorage.getItem('outbound_records')) || [];
+let outboundRecords = [];
 
 document.addEventListener('DOMContentLoaded', function() {
+    loadData();
     renderRecords();
+    
+    // 使用事件委托处理删除按钮点击
+    document.getElementById('recordsTable').addEventListener('click', function(e) {
+        const target = e.target;
+        if (target.classList.contains('btn-danger')) {
+            const row = target.closest('tr');
+            if (row) {
+                const recordId = parseInt(row.dataset.recordId);
+                if (!isNaN(recordId)) {
+                    deleteRecord(recordId);
+                }
+            }
+        }
+    });
 });
+
+function loadData() {
+    try {
+        const saved = localStorage.getItem('outbound_records');
+        if (saved) {
+            outboundRecords = JSON.parse(saved);
+        }
+    } catch (e) {
+        console.error('Failed to load data:', e);
+        outboundRecords = [];
+    }
+}
 
 function submitOutbound() {
     const productName = document.getElementById('productName').value.trim();
@@ -570,25 +597,35 @@ function renderRecords() {
     document.getElementById('recordsEmpty').style.display = 'none';
 
     tbody.innerHTML = outboundRecords.map((record, index) => `
-        <tr>
+        <tr data-record-id="${record.id}">
             <td>${index + 1}</td>
             <td>${record.productName}</td>
             <td>${record.cardNumber}</td>
             <td>${record.quantity}</td>
             <td>${record.createTime}</td>
             <td>
-                <button class="btn btn-danger" onclick="deleteRecord(${record.id})">删除</button>
+                <button class="btn btn-danger">删除</button>
             </td>
         </tr>
     `).join('');
 }
 
 function deleteRecord(id) {
-    if (!confirm('确定要删除这条出库记录吗？')) return;
+    console.log('deleteRecord called with id:', id);
+    console.log('Current outboundRecords:', outboundRecords);
+    
+    if (!confirm('确定要删除这条出库记录吗？')) {
+        console.log('User cancelled deletion');
+        return;
+    }
 
+    console.log('Before filter - records count:', outboundRecords.length);
     outboundRecords = outboundRecords.filter(r => r.id !== id);
+    console.log('After filter - records count:', outboundRecords.length);
+    
     saveData();
     renderRecords();
+    console.log('Deletion completed successfully');
 }
 
 function isWeChatBrowser() {
