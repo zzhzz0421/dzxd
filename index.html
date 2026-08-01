@@ -485,6 +485,7 @@ tr:last-child td {
                 <button class="btn btn-primary" onclick="exportToExcel()">📥 导出Excel文件</button>
                 <button class="btn btn-info" onclick="openSummaryModal()">📝 生成汇总</button>
                 <button class="btn btn-copy" onclick="generateMonthTextSummary()">📄 当月文字汇总</button>
+                <button class="btn" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); color: white; box-shadow: 0 4px 15px rgba(250, 112, 154, 0.4);" onclick="generateAllRecordsLink()">🔗 生成完整记录链接</button>
             </div>
         </div>
     </div>
@@ -505,6 +506,49 @@ tr:last-child td {
             </div>
             <div class="modal-footer">
                 <button class="btn btn-copy" id="copyBtn" onclick="copySummary()">📋 一键复制</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 链接弹窗 -->
+    <div class="modal-overlay" id="linkModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title">📁 完整记录分享</div>
+                <button class="modal-close" onclick="closeLinkModal()">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 24px;">
+                <div id="linkInfo" style="background: linear-gradient(135deg, #f6f9fc 0%, #eef2f7 100%); border-radius: 12px; padding: 16px; margin-bottom: 20px; border: 1px solid #e8ebff;">
+                    <p style="color: #555; font-size: 14px; margin-bottom: 8px;">共 <strong id="recordCount">0</strong> 条记录 | 总卡数：<strong id="totalCard">0</strong></p>
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <p style="color: #333; font-weight: 600; margin-bottom: 10px; font-size: 14px;">📥 方式一：直接下载（本机）</p>
+                    <button class="btn btn-success" onclick="downloadFile()" style="width: 100%;">⬇️ 下载 Excel 文件</button>
+                </div>
+
+                <div style="margin-bottom: 16px;">
+                    <p style="color: #333; font-weight: 600; margin-bottom: 10px; font-size: 14px;">🔗 方式二：生成分享链接（发给他人）</p>
+                    <p style="color: #666; font-size: 12px; margin-bottom: 10px;">点击下方按钮生成分享链接，他人点击链接即可下载文件</p>
+                    <button class="btn" id="generateShareBtn" onclick="generateShareLink()" style="width: 100%; background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); color: white;">🔗 生成可分享链接</button>
+                </div>
+
+                <div id="shareSection" style="display: none; margin-bottom: 16px;">
+                    <div style="background: #f8f9ff; border: 2px solid #e8ebff; border-radius: 12px; padding: 16px; margin-bottom: 12px; word-break: break-all; max-height: 150px; overflow-y: auto;">
+                        <p style="color: #666; font-size: 11px; margin-bottom: 8px; word-break: break-all; font-family: Consolas, Monaco, monospace;" id="shareLink"></p>
+                    </div>
+                    <button class="btn btn-copy" onclick="copyShareLink()" style="width: 100%;">📋 复制分享链接</button>
+                </div>
+
+                <div style="background: #fff8e1; border-radius: 8px; padding: 12px; border: 1px solid #ffe082;">
+                    <p style="color: #666; font-size: 12px; line-height: 1.6;">
+                        💡 <strong>使用提示：</strong><br>
+                        1. 点击"生成可分享链接"按钮<br>
+                        2. 复制生成的链接<br>
+                        3. 发送给他人（微信/QQ等）<br>
+                        4. 他人打开链接即可下载Excel文件
+                    </p>
+                </div>
             </div>
         </div>
     </div>
@@ -886,11 +930,172 @@ function generateMonthTextSummary() {
     document.getElementById('summaryDate').value = '';
 }
 
+// 存储当前生成的文件信息
+let currentFileDataUrl = null;
+let currentFileName = '';
+let currentFileBase64 = '';
+
+// ArrayBuffer转Base64
+function arrayBufferToBase64(buffer) {
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+}
+
+// 生成完整记录链接
+function generateAllRecordsLink() {
+    if (outboundRecords.length === 0) {
+        alert('暂无出库记录，请先添加数据');
+        return;
+    }
+
+    const totalCardNumber = outboundRecords.reduce((sum, record) => 
+        sum + (parseInt(record.cardNumber) * parseInt(record.quantity)), 0
+    );
+
+    const wb = XLSX.utils.book_new();
+    
+    const data = [
+        ['全部出库记录汇总表'],
+        [],
+        ['序号', '品名', '卡数', '数量', '出库时间']
+    ];
+
+    outboundRecords.forEach((record, index) => {
+        data.push([
+            index + 1,
+            record.productName,
+            parseInt(record.cardNumber),
+            parseInt(record.quantity),
+            record.createTime
+        ]);
+    });
+
+    data.push([]);
+    data.push(['', '总卡数：', totalCardNumber, '', '']);
+    data.push(['', '记录数：', outboundRecords.length, '', '']);
+
+    const ws = XLSX.utils.aoa_to_sheet(data);
+
+    ws['!cols'] = [
+        { wch: 8 },
+        { wch: 20 },
+        { wch: 10 },
+        { wch: 10 },
+        { wch: 20 }
+    ];
+
+    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }];
+
+    XLSX.utils.book_append_sheet(wb, ws, '全部出库记录');
+
+    // 生成Excel文件
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    
+    // 转换为Base64
+    currentFileBase64 = arrayBufferToBase64(wbout);
+    
+    // 生成Data URI（可以直接在浏览器中打开/下载的链接）
+    currentFileDataUrl = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + currentFileBase64;
+    currentFileName = '全部出库记录_' + new Date().toISOString().split('T')[0] + '.xlsx';
+
+    // 更新弹窗内容
+    document.getElementById('recordCount').textContent = outboundRecords.length;
+    document.getElementById('totalCard').textContent = totalCardNumber;
+    
+    // 隐藏分享区域
+    document.getElementById('shareSection').style.display = 'none';
+    document.getElementById('generateShareBtn').style.display = 'block';
+
+    // 显示弹窗
+    document.getElementById('linkModal').classList.add('show');
+}
+
+// 关闭链接弹窗
+function closeLinkModal() {
+    document.getElementById('linkModal').classList.remove('show');
+}
+
+// 生成分享链接
+function generateShareLink() {
+    if (!currentFileBase64) {
+        alert('请先生成文件');
+        return;
+    }
+
+    // 获取当前页面的基础URL
+    const currentUrl = window.location.href;
+    const baseUrl = currentUrl.substring(0, currentUrl.lastIndexOf('/'));
+    
+    // 生成分享链接（指向share.html页面，携带base64数据）
+    const shareUrl = baseUrl + '/share.html#data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + encodeURIComponent(currentFileBase64);
+    
+    // 显示分享链接
+    document.getElementById('shareLink').textContent = shareUrl;
+    document.getElementById('shareSection').style.display = 'block';
+    document.getElementById('generateShareBtn').style.display = 'none';
+}
+
+// 复制分享链接
+function copyShareLink() {
+    const shareLink = document.getElementById('shareLink').textContent;
+    if (!shareLink) {
+        alert('请先生成分享链接');
+        return;
+    }
+
+    const copyBtn = event.target;
+    const textArea = document.createElement('textarea');
+    textArea.value = shareLink;
+    document.body.appendChild(textArea);
+    textArea.select();
+    textArea.setSelectionRange(0, 99999);
+
+    try {
+        document.execCommand('copy');
+        copyBtn.textContent = '✅ 已复制';
+        copyBtn.style.background = 'linear-gradient(135deg, #56ab2f 0%, #a8e6cf 100%)';
+        
+        setTimeout(() => {
+            copyBtn.textContent = '📋 复制分享链接';
+            copyBtn.style.background = 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)';
+        }, 2000);
+    } catch (err) {
+        alert('复制失败，请手动复制链接');
+    }
+    
+    document.body.removeChild(textArea);
+}
+
+// 下载文件
+function downloadFile() {
+    if (!currentFileDataUrl) {
+        alert('请先生成文件');
+        return;
+    }
+
+    const a = document.createElement('a');
+    a.href = currentFileDataUrl;
+    a.download = currentFileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+
 // 点击弹窗外部关闭
 document.addEventListener('click', function(e) {
-    const modal = document.getElementById('summaryModal');
-    if (e.target === modal) {
+    const summaryModal = document.getElementById('summaryModal');
+    const linkModal = document.getElementById('linkModal');
+    
+    if (e.target === summaryModal) {
         closeSummaryModal();
+    }
+    
+    if (e.target === linkModal) {
+        closeLinkModal();
     }
 });
     </script>

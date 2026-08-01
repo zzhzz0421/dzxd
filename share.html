@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel 文件解析器</title>
+    <style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Arial, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    padding: 40px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.container {
+    max-width: 600px;
+    width: 100%;
+}
+
+.panel {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 20px;
+    padding: 40px 30px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+h1 {
+    text-align: center;
+    color: #333;
+    margin-bottom: 10px;
+    font-size: 24px;
+    font-weight: 700;
+}
+
+.subtitle {
+    text-align: center;
+    color: #666;
+    margin-bottom: 30px;
+    font-size: 14px;
+}
+
+.info-box {
+    background: linear-gradient(135deg, #f6f9fc 0%, #eef2f7 100%);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+    border: 1px solid #e8ebff;
+}
+
+.info-box p {
+    color: #555;
+    font-size: 14px;
+    line-height: 1.8;
+    margin-bottom: 8px;
+}
+
+.info-box strong {
+    color: #667eea;
+}
+
+.input-section {
+    margin-bottom: 20px;
+}
+
+.input-section label {
+    display: block;
+    margin-bottom: 10px;
+    color: #333;
+    font-weight: 600;
+    font-size: 15px;
+}
+
+.textarea-wrapper {
+    position: relative;
+}
+
+textarea {
+    width: 100%;
+    min-height: 200px;
+    padding: 16px;
+    border: 2px solid #e8e8e8;
+    border-radius: 12px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    resize: vertical;
+    background: #fafafa;
+    transition: all 0.3s ease;
+}
+
+textarea:focus {
+    outline: none;
+    border-color: #667eea;
+    background: white;
+    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+}
+
+textarea::placeholder {
+    color: #aaa;
+    font-size: 13px;
+}
+
+.btn {
+    padding: 16px 32px;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    width: 100%;
+    letter-spacing: 1px;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+}
+
+.btn-primary:active {
+    transform: translateY(0);
+}
+
+.btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.file-info {
+    background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+    display: none;
+}
+
+.file-info.show {
+    display: block;
+}
+
+.file-info h3 {
+    color: #333;
+    margin-bottom: 10px;
+    font-size: 16px;
+}
+
+.file-info p {
+    color: #555;
+    font-size: 13px;
+    margin-bottom: 5px;
+}
+
+.error-box {
+    background: linear-gradient(135deg, #ff9a9e 0%, #fad0c4 100%);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+    display: none;
+}
+
+.error-box.show {
+    display: block;
+}
+
+.error-box p {
+    color: #c0392b;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.hint {
+    text-align: center;
+    color: #999;
+    font-size: 12px;
+    margin-top: 20px;
+}
+
+.hint a {
+    color: #667eea;
+    text-decoration: none;
+}
+
+.hint a:hover {
+    text-decoration: underline;
+}
+
+@media (min-width: 600px) {
+    .panel {
+        padding: 50px 40px;
+    }
+
+    h1 {
+        font-size: 28px;
+    }
+
+    .btn {
+        width: auto;
+    }
+}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="panel">
+            <h1>📥 Excel 文件解析器</h1>
+            <p class="subtitle">粘贴分享的文件数据，一键下载 Excel 文件</p>
+
+            <div class="info-box">
+                <p>📌 <strong>使用说明：</strong></p>
+                <p>1. 从分享方获取文件数据（Base64 编码字符串）</p>
+                <p>2. 将数据粘贴到下方输入框</p>
+                <p>3. 点击"解析并下载"按钮，保存 Excel 文件</p>
+            </div>
+
+            <div class="input-section">
+                <label>📝 粘贴文件数据</label>
+                <div class="textarea-wrapper">
+                    <textarea id="base64Input" placeholder="在此处粘贴文件数据（以 data: 开头的字符串）..."></textarea>
+                </div>
+            </div>
+
+            <div class="file-info" id="fileInfo">
+                <h3>✅ 文件解析成功</h3>
+                <p id="fileName">文件名：</p>
+                <p id="fileSize">文件大小：</p>
+                <p id="fileType">文件类型：Microsoft Excel (.xlsx)</p>
+            </div>
+
+            <div class="error-box" id="errorBox">
+                <p id="errorMsg">❌ 解析失败，请检查文件数据是否正确</p>
+            </div>
+
+            <button class="btn btn-primary" id="parseBtn" onclick="parseAndDownload()">🔍 解析并下载</button>
+
+            <p class="hint">
+                <a href="index.html">← 返回出库管理系统</a>
+            </p>
+        </div>
+    </div>
+
+    <script>
+// 从URL hash中获取文件数据
+window.addEventListener('DOMContentLoaded', function() {
+    const hash = window.location.hash;
+    if (hash && hash.startsWith('#data:')) {
+        // 从hash中提取data URI
+        const dataUri = decodeURIComponent(hash.substring(1));
+        document.getElementById('base64Input').value = dataUri;
+        // 自动解析
+        parseAndDownload();
+    }
+});
+
+// Base64转Blob
+function base64ToBlob(base64, mime) {
+    const byteCharacters = atob(base64);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    return new Blob([byteArray], { type: mime });
+}
+
+// 解析并下载
+function parseAndDownload() {
+    const input = document.getElementById('base64Input').value.trim();
+    const errorBox = document.getElementById('errorBox');
+    const fileInfo = document.getElementById('fileInfo');
+    const errorMsg = document.getElementById('errorMsg');
+
+    errorBox.classList.remove('show');
+    fileInfo.classList.remove('show');
+
+    if (!input) {
+        errorMsg.textContent = '❌ 请先粘贴文件数据';
+        errorBox.classList.add('show');
+        return;
+    }
+
+    try {
+        let dataUri = input;
+        
+        // 如果输入的是纯Base64，添加前缀
+        if (!input.startsWith('data:')) {
+            dataUri = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + input;
+        }
+
+        // 解析data URI
+        const parts = dataUri.split(',');
+        if (parts.length !== 2) {
+            throw new Error('格式错误');
+        }
+
+        const metadata = parts[0];
+        const base64Data = decodeURIComponent(parts[1]);
+        
+        // 提取文件类型
+        const mimeMatch = metadata.match(/data:([^;]+)/);
+        const mimeType = mimeMatch ? mimeMatch[1] : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+        // 转换为Blob
+        const blob = base64ToBlob(base64Data, mimeType);
+        
+        // 生成文件名
+        const now = new Date();
+        const dateStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+        const fileName = '全部出库记录_' + dateStr + '.xlsx';
+
+        // 显示文件信息
+        document.getElementById('fileName').textContent = '文件名：' + fileName;
+        document.getElementById('fileSize').textContent = '文件大小：' + (blob.size / 1024).toFixed(2) + ' KB';
+        fileInfo.classList.add('show');
+
+        // 下载文件
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        setTimeout(() => {
+            URL.revokeObjectURL(url);
+        }, 1000);
+
+    } catch (error) {
+        errorMsg.textContent = '❌ 解析失败：' + error.message;
+        errorBox.classList.add('show');
+        console.error(error);
+    }
+}
+    </script>
+</body>
+</html>
