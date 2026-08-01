@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Excel 文件解析器</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
     <style>
 * {
     margin: 0;
@@ -260,12 +262,32 @@ textarea::placeholder {
 // 从URL hash中获取文件数据
 window.addEventListener('DOMContentLoaded', function() {
     const hash = window.location.hash;
-    if (hash && hash.startsWith('#data:')) {
-        // 从hash中提取data URI
-        const dataUri = decodeURIComponent(hash.substring(1));
-        document.getElementById('base64Input').value = dataUri;
-        // 自动解析
-        parseAndDownload();
+    if (hash) {
+        // 支持压缩格式：#c=压缩后的数据
+        if (hash.startsWith('#c=')) {
+            const compressedData = decodeURIComponent(hash.substring(3));
+            try {
+                // 解压数据
+                const compressedBytes = atob(compressedData);
+                const compressedArray = new Uint8Array(compressedBytes.length);
+                for (let i = 0; i < compressedBytes.length; i++) {
+                    compressedArray[i] = compressedBytes.charCodeAt(i);
+                }
+                const decompressedBase64 = pako.inflate(compressedArray, { to: 'string' });
+                const dataUri = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + decompressedBase64;
+                document.getElementById('base64Input').value = dataUri;
+                // 自动解析
+                parseAndDownload();
+            } catch (e) {
+                console.error('解压失败:', e);
+            }
+        } else if (hash.startsWith('#data:')) {
+            // 兼容旧格式：#data:URI
+            const dataUri = decodeURIComponent(hash.substring(1));
+            document.getElementById('base64Input').value = dataUri;
+            // 自动解析
+            parseAndDownload();
+        }
     }
 });
 

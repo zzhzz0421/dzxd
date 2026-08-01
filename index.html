@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>出库管理系统</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
     <style>
 * {
     margin: 0;
@@ -534,8 +535,9 @@ tr:last-child td {
                 </div>
 
                 <div id="shareSection" style="display: none; margin-bottom: 16px;">
-                    <div style="background: #f8f9ff; border: 2px solid #e8ebff; border-radius: 12px; padding: 16px; margin-bottom: 12px; word-break: break-all; max-height: 150px; overflow-y: auto;">
-                        <p style="color: #666; font-size: 11px; margin-bottom: 8px; word-break: break-all; font-family: Consolas, Monaco, monospace;" id="shareLink"></p>
+                    <div id="shareInfo" style="background: #e8f5e9; border-radius: 8px; padding: 10px; margin-bottom: 12px; font-size: 12px; color: #333;"></div>
+                    <div style="background: #f8f9ff; border: 2px solid #e8ebff; border-radius: 12px; padding: 16px; margin-bottom: 12px; word-break: break-all; max-height: 100px; overflow-y: auto;">
+                        <p style="color: #666; font-size: 11px; word-break: break-all; font-family: Consolas, Monaco, monospace;" id="shareLink"></p>
                     </div>
                     <button class="btn btn-copy" onclick="copyShareLink()" style="width: 100%;">📋 复制分享链接</button>
                 </div>
@@ -1030,13 +1032,28 @@ function generateShareLink() {
     const currentUrl = window.location.href;
     const baseUrl = currentUrl.substring(0, currentUrl.lastIndexOf('/'));
     
-    // 生成分享链接（指向share.html页面，携带base64数据）
-    const shareUrl = baseUrl + '/share.html#data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + encodeURIComponent(currentFileBase64);
+    // 使用pako压缩base64数据，减小链接体积
+    const compressedData = pako.deflate(currentFileBase64);
+    const compressedBase64 = btoa(String.fromCharCode(...compressedData));
     
-    // 显示分享链接
+    // 生成分享链接（指向share.html页面，携带压缩后的数据）
+    const shareUrl = baseUrl + '/share.html#c=' + encodeURIComponent(compressedBase64);
+    
+    // 显示分享链接和原始数据大小对比
+    const originalSize = (currentFileBase64.length / 1024).toFixed(1);
+    const compressedSize = (compressedBase64.length / 1024).toFixed(1);
+    const compressionRatio = ((1 - compressedBase64.length / currentFileBase64.length) * 100).toFixed(0);
+    
     document.getElementById('shareLink').textContent = shareUrl;
+    document.getElementById('shareInfo').innerHTML = `
+        📊 压缩效果：原始 ${originalSize}KB → 压缩后 ${compressedSize}KB（节省 ${compressionRatio}%）
+        <br><span style="color: #fa709a; font-size: 11px;">💡 链接较短，可直接在微信中分享</span>
+    `;
     document.getElementById('shareSection').style.display = 'block';
     document.getElementById('generateShareBtn').style.display = 'none';
+    
+    // 保存压缩后的链接信息
+    window._compressedShareData = compressedBase64;
 }
 
 // 复制分享链接
