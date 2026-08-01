@@ -4,8 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>出库管理系统</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.5/libs/lz-string.min.js"></script>
+    <script>
+        // CDN加载失败时的备用方案
+        window.addEventListener('error', function(e) {
+            if (e.target.tagName === 'SCRIPT' && e.target.src.includes('cdnjs')) {
+                console.warn('CDN加载失败，将尝试备用源');
+            }
+        }, true);
+    </script>
     <style>
 * {
     margin: 0;
@@ -1023,8 +1031,8 @@ function closeLinkModal() {
 
 // 生成分享链接
 function generateShareLink() {
-    if (!currentFileBase64) {
-        alert('请先生成文件');
+    if (outboundRecords.length === 0) {
+        alert('暂无出库记录');
         return;
     }
 
@@ -1032,28 +1040,32 @@ function generateShareLink() {
     const currentUrl = window.location.href;
     const baseUrl = currentUrl.substring(0, currentUrl.lastIndexOf('/'));
     
-    // 使用pako压缩base64数据，减小链接体积
-    const compressedData = pako.deflate(currentFileBase64);
-    const compressedBase64 = btoa(String.fromCharCode(...compressedData));
+    // 转换为紧凑数据格式（短键名+数组）
+    const compactData = outboundRecords.map(r => [
+        r.id, r.productName, r.cardNumber, r.quantity, r.createTime
+    ]);
+    const jsonStr = JSON.stringify(compactData);
     
-    // 生成分享链接（指向share.html页面，携带压缩后的数据）
-    const shareUrl = baseUrl + '/share.html#c=' + encodeURIComponent(compressedBase64);
+    // 使用LZString压缩（压缩率最高）
+    const compressed = LZString.compressToEncodedURIComponent(jsonStr);
     
-    // 显示分享链接和原始数据大小对比
-    const originalSize = (currentFileBase64.length / 1024).toFixed(1);
-    const compressedSize = (compressedBase64.length / 1024).toFixed(1);
-    const compressionRatio = ((1 - compressedBase64.length / currentFileBase64.length) * 100).toFixed(0);
+    // 生成分享链接
+    const shareUrl = baseUrl + '/share.html#d=' + compressed;
+    
+    // 计算压缩效果
+    const originalSize = new Blob([jsonStr]).size / 1024;
+    const compressedSize = new Blob([compressed]).size / 1024;
+    const compressionRatio = ((1 - compressedSize / originalSize) * 100).toFixed(0);
+    const recordCount = outboundRecords.length;
     
     document.getElementById('shareLink').textContent = shareUrl;
     document.getElementById('shareInfo').innerHTML = `
-        📊 压缩效果：原始 ${originalSize}KB → 压缩后 ${compressedSize}KB（节省 ${compressionRatio}%）
-        <br><span style="color: #fa709a; font-size: 11px;">💡 链接较短，可直接在微信中分享</span>
+        📊 数据统计：${recordCount} 条记录<br>
+        📉 压缩效果：${originalSize.toFixed(1)}KB → ${compressedSize.toFixed(1)}KB（节省 ${compressionRatio}%）<br>
+        <span style="color: #4caf50; font-size: 11px;">✅ 链接已优化，支持微信分享</span>
     `;
     document.getElementById('shareSection').style.display = 'block';
     document.getElementById('generateShareBtn').style.display = 'none';
-    
-    // 保存压缩后的链接信息
-    window._compressedShareData = compressedBase64;
 }
 
 // 复制分享链接

@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Excel 文件解析器</title>
+    <title>出库记录解析器</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.5/lz-string.min.js"></script>
     <style>
 * {
     margin: 0;
@@ -222,35 +222,37 @@ textarea::placeholder {
 <body>
     <div class="container">
         <div class="panel">
-            <h1>📥 Excel 文件解析器</h1>
-            <p class="subtitle">粘贴分享的文件数据，一键下载 Excel 文件</p>
+            <h1>📥 出库记录解析器</h1>
+            <p class="subtitle">解析分享的出库记录，一键下载 Excel 文件</p>
 
-            <div class="info-box">
+            <div class="info-box" id="infoBox">
                 <p>📌 <strong>使用说明：</strong></p>
-                <p>1. 从分享方获取文件数据（Base64 编码字符串）</p>
-                <p>2. 将数据粘贴到下方输入框</p>
-                <p>3. 点击"解析并下载"按钮，保存 Excel 文件</p>
+                <p>1. 点击分享链接后，页面会自动解析数据</p>
+                <p>2. 解析成功后点击"下载Excel"按钮保存文件</p>
+                <p>3. 如自动解析失败，可手动粘贴数据重试</p>
             </div>
 
-            <div class="input-section">
-                <label>📝 粘贴文件数据</label>
+            <div class="input-section" id="inputSection" style="display: none;">
+                <label>📝 手动粘贴数据</label>
                 <div class="textarea-wrapper">
-                    <textarea id="base64Input" placeholder="在此处粘贴文件数据（以 data: 开头的字符串）..."></textarea>
+                    <textarea id="base64Input" placeholder="粘贴分享链接中的数据部分..."></textarea>
                 </div>
+                <button class="btn btn-primary" onclick="parseAndDownload()" style="width: 100%; margin-top: 12px;">🔍 解析数据</button>
             </div>
 
             <div class="file-info" id="fileInfo">
-                <h3>✅ 文件解析成功</h3>
+                <h3>✅ 记录解析成功</h3>
                 <p id="fileName">文件名：</p>
-                <p id="fileSize">文件大小：</p>
-                <p id="fileType">文件类型：Microsoft Excel (.xlsx)</p>
+                <p id="fileSize">记录数：</p>
             </div>
 
             <div class="error-box" id="errorBox">
-                <p id="errorMsg">❌ 解析失败，请检查文件数据是否正确</p>
+                <p id="errorMsg">❌ 解析失败，请检查数据是否正确</p>
             </div>
 
-            <button class="btn btn-primary" id="parseBtn" onclick="parseAndDownload()">🔍 解析并下载</button>
+            <button class="btn btn-primary" id="downloadBtn" onclick="downloadExcel()" style="display: none;">⬇️ 下载 Excel 文件</button>
+            
+            <button class="btn" onclick="document.getElementById('inputSection').style.display='block';" style="width: 100%; margin-top: 12px; background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); color: #333; display: none;" id="retryBtn">� 手动重试</button>
 
             <p class="hint">
                 <a href="index.html">← 返回出库管理系统</a>
@@ -259,117 +261,160 @@ textarea::placeholder {
     </div>
 
     <script>
+// 存储解析后的记录数据
+let parsedRecords = null;
+
 // 从URL hash中获取文件数据
 window.addEventListener('DOMContentLoaded', function() {
     const hash = window.location.hash;
     if (hash) {
-        // 支持压缩格式：#c=压缩后的数据
-        if (hash.startsWith('#c=')) {
-            const compressedData = decodeURIComponent(hash.substring(3));
+        // 支持新格式：#d=压缩后的记录数据
+        if (hash.startsWith('#d=')) {
+            const compressedData = hash.substring(3);
             try {
-                // 解压数据
-                const compressedBytes = atob(compressedData);
-                const compressedArray = new Uint8Array(compressedBytes.length);
-                for (let i = 0; i < compressedBytes.length; i++) {
-                    compressedArray[i] = compressedBytes.charCodeAt(i);
-                }
-                const decompressedBase64 = pako.inflate(compressedArray, { to: 'string' });
-                const dataUri = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + decompressedBase64;
-                document.getElementById('base64Input').value = dataUri;
-                // 自动解析
-                parseAndDownload();
+                // 使用LZString解压
+                const jsonStr = LZString.decompressFromEncodedURIComponent(compressedData);
+                const records = JSON.parse(jsonStr);
+                parsedRecords = records;
+                displayFileInfo(records);
+                // 显示下载按钮
+                document.getElementById('downloadBtn').style.display = 'block';
             } catch (e) {
                 console.error('解压失败:', e);
+                showError('链接解析失败：' + e.message);
+                document.getElementById('retryBtn').style.display = 'block';
             }
-        } else if (hash.startsWith('#data:')) {
-            // 兼容旧格式：#data:URI
-            const dataUri = decodeURIComponent(hash.substring(1));
-            document.getElementById('base64Input').value = dataUri;
-            // 自动解析
-            parseAndDownload();
+        } else {
+            // 没有hash，显示手动输入区域
+            document.getElementById('inputSection').style.display = 'block';
         }
+    } else {
+        // 没有hash，显示手动输入区域
+        document.getElementById('inputSection').style.display = 'block';
     }
 });
 
-// Base64转Blob
-function base64ToBlob(base64, mime) {
-    const byteCharacters = atob(base64);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-    const byteArray = new Uint8Array(byteNumbers);
-    return new Blob([byteArray], { type: mime });
+// 显示文件信息
+function displayFileInfo(records) {
+    const fileInfo = document.getElementById('fileInfo');
+    const errorBox = document.getElementById('errorBox');
+    errorBox.classList.remove('show');
+    fileInfo.classList.add('show');
+    
+    const totalCount = records.length;
+    const totalCardNumber = records.reduce((sum, r) => sum + (r[2] * r[3]), 0);
+    
+    document.getElementById('fileName').textContent = '文件名：全部出库记录.xlsx';
+    document.getElementById('fileSize').textContent = `共 ${totalCount} 条记录 | 总卡数：${totalCardNumber}`;
+    
+    // 隐藏提示框
+    document.getElementById('infoBox').style.display = 'none';
 }
 
-// 解析并下载
-function parseAndDownload() {
-    const input = document.getElementById('base64Input').value.trim();
-    const errorBox = document.getElementById('errorBox');
-    const fileInfo = document.getElementById('fileInfo');
-    const errorMsg = document.getElementById('errorMsg');
-
-    errorBox.classList.remove('show');
-    fileInfo.classList.remove('show');
-
-    if (!input) {
-        errorMsg.textContent = '❌ 请先粘贴文件数据';
-        errorBox.classList.add('show');
+// 生成Excel并下载
+function downloadExcel() {
+    if (!parsedRecords || parsedRecords.length === 0) {
+        showError('没有可下载的记录');
         return;
     }
 
     try {
-        let dataUri = input;
+        // 转换为原始格式
+        const records = parsedRecords.map(r => ({
+            id: r[0],
+            productName: r[1],
+            cardNumber: r[2],
+            quantity: r[3],
+            createTime: r[4]
+        }));
+
+        const totalCardNumber = records.reduce((sum, r) => sum + (r.cardNumber * r.quantity), 0);
+
+        const wb = XLSX.utils.book_new();
         
-        // 如果输入的是纯Base64，添加前缀
-        if (!input.startsWith('data:')) {
-            dataUri = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + input;
-        }
+        const data = [
+            ['全部出库记录汇总表'],
+            [],
+            ['序号', '品名', '卡数', '数量', '出库时间']
+        ];
 
-        // 解析data URI
-        const parts = dataUri.split(',');
-        if (parts.length !== 2) {
-            throw new Error('格式错误');
-        }
+        records.forEach((record, index) => {
+            data.push([
+                index + 1,
+                record.productName,
+                record.cardNumber,
+                record.quantity,
+                record.createTime
+            ]);
+        });
 
-        const metadata = parts[0];
-        const base64Data = decodeURIComponent(parts[1]);
+        data.push([]);
+        data.push(['', '总卡数：', totalCardNumber, '', '']);
+        data.push(['', '记录数：', records.length, '', '']);
+
+        const ws = XLSX.utils.aoa_to_sheet(data);
+
+        ws['!cols'] = [
+            { wch: 8 },
+            { wch: 20 },
+            { wch: 10 },
+            { wch: 10 },
+            { wch: 20 }
+        ];
+
+        ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }];
+
+        XLSX.utils.book_append_sheet(wb, ws, '全部出库记录');
+
+        const fileName = '全部出库记录_' + new Date().toISOString().split('T')[0] + '.xlsx';
         
-        // 提取文件类型
-        const mimeMatch = metadata.match(/data:([^;]+)/);
-        const mimeType = mimeMatch ? mimeMatch[1] : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-
-        // 转换为Blob
-        const blob = base64ToBlob(base64Data, mimeType);
-        
-        // 生成文件名
-        const now = new Date();
-        const dateStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
-        const fileName = '全部出库记录_' + dateStr + '.xlsx';
-
-        // 显示文件信息
-        document.getElementById('fileName').textContent = '文件名：' + fileName;
-        document.getElementById('fileSize').textContent = '文件大小：' + (blob.size / 1024).toFixed(2) + ' KB';
-        fileInfo.classList.add('show');
-
         // 下载文件
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-
-        setTimeout(() => {
-            URL.revokeObjectURL(url);
-        }, 1000);
-
+        XLSX.writeFile(wb, fileName);
+        
     } catch (error) {
-        errorMsg.textContent = '❌ 解析失败：' + error.message;
-        errorBox.classList.add('show');
+        showError('生成Excel失败：' + error.message);
         console.error(error);
     }
+}
+
+// 手动粘贴解析
+function parseAndDownload() {
+    const input = document.getElementById('base64Input').value.trim();
+    
+    if (!input) {
+        showError('请先粘贴数据');
+        return;
+    }
+
+    try {
+        // 尝试解压
+        let jsonStr;
+        if (input.startsWith('d=')) {
+            jsonStr = LZString.decompressFromEncodedURIComponent(input.substring(2));
+        } else {
+            jsonStr = LZString.decompressFromEncodedURIComponent(input);
+        }
+        
+        parsedRecords = JSON.parse(jsonStr);
+        displayFileInfo(parsedRecords);
+        // 显示下载按钮
+        document.getElementById('downloadBtn').style.display = 'block';
+        document.getElementById('inputSection').style.display = 'none';
+    } catch (error) {
+        showError('解析失败：' + error.message);
+    }
+}
+
+// 显示错误
+function showError(msg) {
+    const errorBox = document.getElementById('errorBox');
+    const errorMsg = document.getElementById('errorMsg');
+    errorMsg.textContent = '❌ ' + msg;
+    errorBox.classList.add('show');
+    
+    setTimeout(() => {
+        errorBox.classList.remove('show');
+    }, 5000);
 }
     </script>
 </body>
